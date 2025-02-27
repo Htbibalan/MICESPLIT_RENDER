@@ -18,8 +18,16 @@
             padding: 8px;
             margin: 5px;
         }
-        #results {
+        #results, #log {
             margin-top: 20px;
+            text-align: left;
+            width: 50%;
+            margin-left: auto;
+            margin-right: auto;
+            padding: 10px;
+            border: 1px solid #ccc;
+            min-height: 100px;
+            background-color: #f9f9f9;
         }
     </style>
 </head>
@@ -39,7 +47,11 @@
     <input type="number" id="num_groups">
     <button onclick="distribute()">Distribute</button>
 
-    <div id="results"></div>
+    <h3>Log:</h3>
+    <div id="log">No mice added yet.</div>
+
+    <h3>Distribution Results:</h3>
+    <div id="results">No distribution yet.</div>
 
     <script>
         function addMouse() {
@@ -53,7 +65,12 @@
             })
             .then(response => response.json())
             .then(data => {
-                alert(data.message);
+                if (data.error) {
+                    document.getElementById("log").innerHTML += `<p style="color:red;">${data.error}</p>`;
+                } else {
+                    let logDiv = document.getElementById("log");
+                    logDiv.innerHTML += `<p>Added: Mouse ID = <b>${mouseID}</b>, Weight = <b>${weight}</b></p>`;
+                }
             })
             .catch(error => console.error("Error:", error));
         }
@@ -68,6 +85,11 @@
             })
             .then(response => response.json())
             .then(data => {
+                if (data.error) {
+                    document.getElementById("results").innerHTML = `<p style="color:red;">${data.error}</p>`;
+                    return;
+                }
+                
                 let resultDiv = document.getElementById("results");
                 resultDiv.innerHTML = "<h3>Distribution Results:</h3>";
 
@@ -81,16 +103,17 @@
             .catch(error => console.error("Error:", error));
         }
     </script>
-<hr>
-<footer>
-    <p>© 2025 McCutcheonLab | UiT | Norway</p>
-    <p>
-        Developed by 
-        <a href="https://www.linkedin.com/in/hamid-taghipourbibalan-b7239088/" target="_blank">
-            Hamid Taghipourbibalan
-        </a>
-    </p>
-</footer>
+
+    <hr>
+    <footer>
+        <p>© 2025 McCutcheonLab | UiT | Norway</p>
+        <p>
+            Developed by 
+            <a href="https://www.linkedin.com/in/hamid-taghipourbibalan-b7239088/" target="_blank">
+                Hamid Taghipourbibalan
+            </a>
+        </p>
+    </footer>
 
 </body>
 </html>
