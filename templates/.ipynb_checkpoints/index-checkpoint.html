@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MiceSplit - Group Mice</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        label {
+            margin-right: 10px;
+        }
+        input {
+            margin-bottom: 10px;
+            padding: 5px;
+        }
+        button {
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        .error {
+            color: red;
+        }
+        .success {
+            color: green;
+        }
+        .footer {
+            margin-top: 30px;
+        }
+        .group {
+            margin-top: 20px;
+        }
+        .group div {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>MiceSplit - Mice Distribution</h1>
+
+    <!-- Add Mouse Form -->
+    <h3>Add Mouse</h3>
+    <form id="addMouseForm">
+        <label for="mouse_id">Mouse ID:</label>
+        <input type="text" id="mouse_id" name="mouse_id"><br><br>
+        <label for="weight">Weight:</label>
+        <input type="text" id="weight" name="weight"><br><br>
+        <button type="submit">Add Mouse</button>
+    </form>
+    <p id="addMessage" class="error"></p>
+
+    <hr>
+
+    <!-- Number of Groups Form -->
+    <h3>Define Number of Groups</h3>
+    <form id="distributeForm">
+        <label for="groups">Number of groups:</label>
+        <input type="text" id="groups" name="groups"><br><br>
+        <button type="submit">Distribute</button>
+    </form>
+    <p id="distributeMessage" class="error"></p>
+
+    <h3>Results</h3>
+    <div id="results"></div>
+
+    <!-- Footer -->
+    <div class="footer">
+        <p>© 2025 McCutcheonLab | UiT | Norway | <a href="https://www.linkedin.com/in/hamid-taghipourbibalan-b7239088/" target="_blank">Developed by Hamid Taghipourbibalan</a></p>
+    </div>
+
+    <script>
+        let miceData = [];
+
+        // Add mouse data to the list
+        document.getElementById('addMouseForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const mouse_id = document.getElementById('mouse_id').value;
+            const weight = document.getElementById('weight').value;
+
+            const response = await fetch('/add_mouse', {
+                method: 'POST',
+                body: new URLSearchParams({ mouse_id, weight }),
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            });
+
+            const result = await response.json();
+            if (response.ok) {
+                document.getElementById('addMessage').textContent = result.success;
+                document.getElementById('addMessage').classList.remove('error');
+                document.getElementById('addMessage').classList.add('success');
+                document.getElementById('mouse_id').value = '';
+                document.getElementById('weight').value = '';
+                updateMiceList();
+            } else {
+                document.getElementById('addMessage').textContent = result.error;
+                document.getElementById('addMessage').classList.remove('success');
+                document.getElementById('addMessage').classList.add('error');
+            }
+        };
+
+        // Distribute mice into groups
+        document.getElementById('distributeForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const groups = document.getElementById('groups').value;
+
+            const response = await fetch('/distribute', {
+                method: 'POST',
+                body: new URLSearchParams({ groups }),
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            });
+
+            const result = await response.json();
+            if (response.ok) {
+                document.getElementById('distributeMessage').textContent = '';
+                displayGroups(result.groups);
+            } else {
+                document.getElementById('distributeMessage').textContent = result.error;
+                document.getElementById('results').textContent = '';
+            }
+        };
+
+        // Update the mouse list
+        function updateMiceList() {
+            const miceList = document.getElementById('results');
+            miceList.innerHTML = '<h4>Added Mice:</h4><ul>' + miceData.map(m => `<li>${m[0]} (Weight: ${m[1]})</li>`).join('') + '</ul>';
+        }
+
+        // Display the distributed groups
+        function displayGroups(groups) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+
+            groups.forEach((group, index) => {
+                const groupDiv = document.createElement('div');
+                groupDiv.classList.add('group');
+                groupDiv.innerHTML = `<h4>Group ${index + 1}:</h4><ul>` +
+                    group.map(m => `<li>${m[0]} (Weight: ${m[1]})</li>`).join('') +
+                    `</ul>`;
+                resultsDiv.appendChild(groupDiv);
+            });
+        }
+    </script>
+</body>
+</html>
