@@ -65,11 +65,11 @@ def upload_csv():
 
             new_mice.append({"mouse_id": row['MouseID'], "weight": weight})
 
-        # Update global mice_data
+        # Merge new data with manually added mice
         global mice_data
-        mice_data = new_mice
+        mice_data.extend(new_mice)
 
-        return jsonify({"message": f"{len(new_mice)} mice added successfully from CSV.", "mice_data": new_mice})
+        return jsonify({"message": f"{len(new_mice)} mice added successfully from CSV.", "mice_data": mice_data})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -104,18 +104,18 @@ def distribute():
 
     return jsonify({"groups": groups})
 
-@app.route('/health')
-def health_check():
-    return "OK", 200
-
 @app.route('/sample_csv')
 def sample_csv():
-    """ Provides a properly formatted sample CSV file """
+    """ Provides a correctly formatted sample CSV file """
     sample_data = "MouseID,Weight\nM1,23.5\nM2,21.8\nM3,25.2\nM4,20.0\nM5,22.3\n"
     return sample_data, 200, {
         "Content-Type": "text/csv",
         "Content-Disposition": "attachment; filename=sample_mice.csv"
     }
+
+@app.route('/health')
+def health_check():
+    return "OK", 200
 
 if __name__ == '__main__':
     app.run(debug=True)
