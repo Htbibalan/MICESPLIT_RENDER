@@ -7,21 +7,6 @@ app = Flask(__name__)
 # Store mouse data
 mice_data = []
 
-def split_list(lst, n):
-    """
-    Splits the list lst into n contiguous sublists.
-    This preserves the order so that mice with similar weights (after sorting)
-    will end up in the same group.
-    """
-    k, m = divmod(len(lst), n)
-    result = []
-    start = 0
-    for i in range(n):
-        end = start + k + (1 if i < m else 0)
-        result.append(lst[start:end])
-        start = end
-    return result
-
 @app.route('/')
 def home():
     return render_template('index.html')
@@ -49,44 +34,25 @@ def add_mouse():
 
 @app.route('/upload_csv', methods=['POST'])
 def upload_csv():
-    """Allows users to upload a CSV file with headers mouseID and bodyweight."""
     if 'file' not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
-
     file = request.files['file']
     if file.filename == '':
         return jsonify({"error": "No file selected"}), 400
-
     if not file.filename.endswith('.csv'):
         return jsonify({"error": "Only CSV files are allowed"}), 400
-
     try:
         stream = io.StringIO(file.stream.read().decode("utf-8"))
         reader = csv.DictReader(stream)
         new_mice = []
         for row in reader:
-            # Allow headers: either "mouseID" or "MouseID"
-            if 'mouseID' in row:
-                id_val = row['mouseID']
-            elif 'MouseID' in row:
-                id_val = row['MouseID']
-            else:
-                return jsonify({"error": "CSV must contain a 'mouseID' column"}), 400
-
-            # Allow headers: either "bodyweight" or "Weight"
-            if 'bodyweight' in row:
-                weight_val = row['bodyweight']
-            elif 'Weight' in row:
-                weight_val = row['Weight']
-            else:
-                return jsonify({"error": "CSV must contain a 'bodyweight' column"}), 400
-
+            if 'MouseID' not in row or 'Weight' not in row:
+                return jsonify({"error": "CSV must contain 'MouseID' and 'Weight' columns"}), 400
             try:
-                weight_float = float(weight_val)
+                weight = float(row['Weight'])
             except ValueError:
-                return jsonify({"error": f"Invalid weight value for {id_val}"}), 400
-
-            new_mice.append({"mouse_id": id_val, "weight": weight_float})
+                return jsonify({"error": f"Invalid weight value for {row['MouseID']}"}), 400
+            new_mice.append({"mouse_id": row['MouseID'], "weight": weight})
         global mice_data
         mice_data.extend(new_mice)
         return jsonify({"message": f"{len(new_mice)} mice added successfully from CSV.", "mice_data": mice_data})
@@ -95,10 +61,6 @@ def upload_csv():
 
 @app.route('/distribute', methods=['POST'])
 def distribute():
-    """
-    Distributes the mice into groups by first sorting them by weight
-    so that similar weights end up together.
-    """
     data = request.json
     n_groups = data.get("n_groups")
 
@@ -112,17 +74,21 @@ def distribute():
     if len(mice_data) == 0:
         return jsonify({"error": "No mice data to distribute."}), 400
 
-    # Sort mice by weight in ascending order so that similar weights are contiguous.
-    sorted_mice = sorted(mice_data, key=lambda x: x['weight'])
-    groups = split_list(sorted_mice, n_groups)
-    
-    # Calculate the total weight for each group.
-    group_weights = [sum(mouse['weight'] for mouse in group) for group in groups]
+    # Sort mice by weight (descending)
+    sorted_mice = sorted(mice_data, key=lambda x: x['weight'], reverse=True)
+    groups = [[] for _ in range(n_groups)]
+    group_sums = [0.0] * n_groups
 
-    # Clear mice_data after distribution to avoid duplicate entries on subsequent runs.
+    for mouse in sorted_mice:
+        # Find the group with the lowest total weight
+        lightest_group_idx = group_sums.index(min(group_sums))
+        groups[lightest_group_idx].append(mouse)
+        group_sums[lightest_group_idx] += mouse['weight']
+
+    # Clear mice data after distribution to prevent duplicate entries on next run
     mice_data.clear()
 
-    return jsonify({"groups": groups, "weights": group_weights})
+    return jsonify({"groups": groups, "weights": group_sums})
 
 @app.route('/health')
 def health_check():
