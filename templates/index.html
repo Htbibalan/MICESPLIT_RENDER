@@ -64,5 +64,105 @@
         </p>
     </footer>
 
+    <script>
+    // Function to upload CSV file
+    function uploadCSV() {
+       var fileInput = document.getElementById("csv_file");
+       var file = fileInput.files[0];
+       if (!file) {
+          alert("No file selected!");
+          return;
+       }
+       var formData = new FormData();
+       formData.append("file", file);
+
+       fetch("/upload_csv", {
+          method: "POST",
+          body: formData
+       })
+       .then(response => response.json())
+       .then(data => {
+           if (data.error) {
+               document.getElementById("log").innerHTML = "Error: " + data.error;
+           } else {
+               document.getElementById("log").innerHTML = data.message;
+           }
+       })
+       .catch(err => {
+           console.error(err);
+           document.getElementById("log").innerHTML = "Error uploading file.";
+       });
+    }
+
+    // Function to add an individual mouse
+    function addMouse() {
+        var mouseId = document.getElementById("mouse_id").value;
+        var weight = document.getElementById("weight").value;
+        if (!mouseId || !weight) {
+           alert("Both Mouse ID and Weight are required.");
+           return;
+        }
+        fetch("/add_mouse", {
+             method: "POST",
+             headers: {
+                 "Content-Type": "application/json"
+             },
+             body: JSON.stringify({
+                 mouse_id: mouseId,
+                 weight: weight
+             })
+        })
+        .then(response => response.json())
+        .then(data => {
+             if (data.error) {
+                  document.getElementById("log").innerHTML = "Error: " + data.error;
+             } else {
+                  document.getElementById("log").innerHTML = data.message;
+             }
+        })
+        .catch(err => {
+              console.error(err);
+              document.getElementById("log").innerHTML = "Error adding mouse.";
+        });
+    }
+
+    // Function to distribute mice into groups
+    function distribute() {
+        var numGroups = document.getElementById("num_groups").value;
+        if (!numGroups) {
+           alert("Number of groups is required.");
+           return;
+        }
+        fetch("/distribute", {
+             method: "POST",
+             headers: {
+                 "Content-Type": "application/json"
+             },
+             body: JSON.stringify({
+                 n_groups: numGroups
+             })
+        })
+        .then(response => response.json())
+        .then(data => {
+             if (data.error) {
+                 document.getElementById("results").innerHTML = "Error: " + data.error;
+             } else {
+                 var groupsHtml = "";
+                 for (var group in data.groups) {
+                     groupsHtml += "<h4>Group " + group + "</h4><ul>";
+                     data.groups[group].forEach(function(mouse) {
+                          groupsHtml += "<li>" + mouse.mouse_id + " (" + mouse.weight + ")</li>";
+                     });
+                     groupsHtml += "</ul>";
+                 }
+                 document.getElementById("results").innerHTML = groupsHtml;
+             }
+        })
+        .catch(err => {
+              console.error(err);
+              document.getElementById("results").innerHTML = "Error distributing mice.";
+        });
+    }
+    </script>
 </body>
 </html>
