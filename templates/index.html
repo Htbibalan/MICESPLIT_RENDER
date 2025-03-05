@@ -33,8 +33,10 @@
 
     <h3>Upload CSV File</h3>
     <input type="file" id="csv_file">
-    <button onclick="uploadCSV()">Upload</button>
-    <p><a href="/sample_csv" download>Download Sample CSV</a></p>
+    <button onclick="uploadCSV()">Upload CSV</button>
+    <p>CSV should have headers: mouseID and bodyweight</p>
+
+    <hr>
 
     <h3>Add Individual Mouse</h3>
     <label>Mouse ID:</label>
@@ -42,6 +44,8 @@
     <label>Weight:</label>
     <input type="number" id="weight">
     <button onclick="addMouse()">Add Mouse</button>
+
+    <br><br>
 
     <h3>Number of Groups:</h3>
     <input type="number" id="num_groups">
@@ -58,111 +62,87 @@
         <p>© 2025 McCutcheonLab | UiT | Norway</p>
         <p>
             Developed by 
-            <a href="https://www.linkedin.com/in/hamid-taghipourbibalan/" target="_blank">
+            <a href="https://www.linkedin.com/in/hamid-taghipourbibalan-b7239088/" target="_blank">
                 Hamid Taghipourbibalan
             </a>
         </p>
     </footer>
 
     <script>
-    // Function to upload CSV file
-    function uploadCSV() {
-       var fileInput = document.getElementById("csv_file");
-       var file = fileInput.files[0];
-       if (!file) {
-          alert("No file selected!");
-          return;
-       }
-       var formData = new FormData();
-       formData.append("file", file);
+        function addMouse() {
+            const mouseID = document.getElementById("mouse_id").value;
+            const weight = document.getElementById("weight").value;
 
-       fetch("/upload_csv", {
-          method: "POST",
-          body: formData
-       })
-       .then(response => response.json())
-       .then(data => {
-           if (data.error) {
-               document.getElementById("log").innerHTML = "Error: " + data.error;
-           } else {
-               document.getElementById("log").innerHTML = data.message;
-           }
-       })
-       .catch(err => {
-           console.error(err);
-           document.getElementById("log").innerHTML = "Error uploading file.";
-       });
-    }
-
-    // Function to add an individual mouse
-    function addMouse() {
-        var mouseId = document.getElementById("mouse_id").value;
-        var weight = document.getElementById("weight").value;
-        if (!mouseId || !weight) {
-           alert("Both Mouse ID and Weight are required.");
-           return;
+            fetch("/add_mouse", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({mouse_id: mouseID, weight: weight})
+            })
+            .then(response => response.json())
+            .then(data => {
+                const logDiv = document.getElementById("log");
+                if (data.error) {
+                    logDiv.innerHTML += `<p style="color:red;">${data.error}</p>`;
+                } else {
+                    logDiv.innerHTML += `<p>Added: Mouse ID = <b>${mouseID}</b>, Weight = <b>${weight}</b></p>`;
+                }
+            })
+            .catch(error => console.error("Error:", error));
         }
-        fetch("/add_mouse", {
-             method: "POST",
-             headers: {
-                 "Content-Type": "application/json"
-             },
-             body: JSON.stringify({
-                 mouse_id: mouseId,
-                 weight: weight
-             })
-        })
-        .then(response => response.json())
-        .then(data => {
-             if (data.error) {
-                  document.getElementById("log").innerHTML = "Error: " + data.error;
-             } else {
-                  document.getElementById("log").innerHTML = data.message;
-             }
-        })
-        .catch(err => {
-              console.error(err);
-              document.getElementById("log").innerHTML = "Error adding mouse.";
-        });
-    }
 
-    // Function to distribute mice into groups
-    function distribute() {
-        var numGroups = document.getElementById("num_groups").value;
-        if (!numGroups) {
-           alert("Number of groups is required.");
-           return;
+        function distribute() {
+            const numGroups = document.getElementById("num_groups").value;
+
+            fetch("/distribute", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({n_groups: numGroups})
+            })
+            .then(response => response.json())
+            .then(data => {
+                const resultsDiv = document.getElementById("results");
+                if (data.error) {
+                    resultsDiv.innerHTML = `<p style="color:red;">${data.error}</p>`;
+                    return;
+                }
+                
+                resultsDiv.innerHTML = `<h3>Distribution Results:</h3>`;
+                data.groups.forEach((group, index) => {
+                    resultsDiv.innerHTML += `<h4>Group ${index + 1} (Total Weight: ${data.weights[index].toFixed(2)})</h4>`;
+                    group.forEach(mouse => {
+                        resultsDiv.innerHTML += `<p>ID: ${mouse.mouse_id}, Weight: ${mouse.weight}</p>`;
+                    });
+                });
+            })
+            .catch(error => console.error("Error:", error));
         }
-        fetch("/distribute", {
-             method: "POST",
-             headers: {
-                 "Content-Type": "application/json"
-             },
-             body: JSON.stringify({
-                 n_groups: numGroups
-             })
-        })
-        .then(response => response.json())
-        .then(data => {
-             if (data.error) {
-                 document.getElementById("results").innerHTML = "Error: " + data.error;
-             } else {
-                 var groupsHtml = "";
-                 for (var group in data.groups) {
-                     groupsHtml += "<h4>Group " + group + "</h4><ul>";
-                     data.groups[group].forEach(function(mouse) {
-                          groupsHtml += "<li>" + mouse.mouse_id + " (" + mouse.weight + ")</li>";
-                     });
-                     groupsHtml += "</ul>";
-                 }
-                 document.getElementById("results").innerHTML = groupsHtml;
-             }
-        })
-        .catch(err => {
-              console.error(err);
-              document.getElementById("results").innerHTML = "Error distributing mice.";
-        });
-    }
+
+        function uploadCSV() {
+            const fileInput = document.getElementById("csv_file");
+            const file = fileInput.files[0];
+            if (!file) {
+                alert("Please select a CSV file.");
+                return;
+            }
+            const formData = new FormData();
+            formData.append("file", file);
+
+            fetch("/upload_csv", {
+                method: "POST",
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                const logDiv = document.getElementById("log");
+                if (data.error) {
+                    logDiv.innerHTML += `<p style="color:red;">${data.error}</p>`;
+                } else {
+                    logDiv.innerHTML += `<p>${data.message}</p>`;
+                }
+            })
+            .catch(error => console.error("Error:", error));
+        }
     </script>
+
 </body>
 </html>

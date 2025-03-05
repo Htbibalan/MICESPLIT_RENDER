@@ -1,15 +1,26 @@
-#test_fix
-
 from flask import Flask, render_template, request, jsonify
 import csv
 import io
-import numpy as np
-from scipy.cluster.hierarchy import linkage, fcluster
 
 app = Flask(__name__)
 
 # Store mouse data
 mice_data = []
+
+def split_list(lst, n):
+    """
+    Splits the list lst into n contiguous sublists.
+    This preserves the order so that mice with similar weights (after sorting)
+    will end up in the same group.
+    """
+    k, m = divmod(len(lst), n)
+    result = []
+    start = 0
+    for i in range(n):
+        end = start + k + (1 if i < m else 0)
+        result.append(lst[start:end])
+        start = end
+    return result
 
 @app.route('/')
 def home():
@@ -17,7 +28,6 @@ def home():
 
 @app.route('/add_mouse', methods=['POST'])
 def add_mouse():
-    """Manually add a mouse with its weight"""
     data = request.json
     mouse_id = data.get("mouse_id")
     weight = data.get("weight")
@@ -39,14 +49,13 @@ def add_mouse():
 
 @app.route('/upload_csv', methods=['POST'])
 def upload_csv():
-    """ Accepts a CSV file and processes the data """
+    """Allows users to upload a CSV file with headers mouseID and bodyweight."""
     if 'file' not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
 
     file = request.files['file']
-    
     if file.filename == '':
-        return jsonify({"error": "No selected file"}), 400
+        return jsonify({"error": "No file selected"}), 400
 
     if not file.filename.endswith('.csv'):
         return jsonify({"error": "Only CSV files are allowed"}), 400
@@ -55,30 +64,41 @@ def upload_csv():
         stream = io.StringIO(file.stream.read().decode("utf-8"))
         reader = csv.DictReader(stream)
         new_mice = []
-
         for row in reader:
-            if 'MouseID' not in row or 'Weight' not in row:
-                return jsonify({"error": "CSV must contain 'MouseID' and 'Weight' columns"}), 400
-            
+            # Allow headers: either "mouseID" or "MouseID"
+            if 'mouseID' in row:
+                id_val = row['mouseID']
+            elif 'MouseID' in row:
+                id_val = row['MouseID']
+            else:
+                return jsonify({"error": "CSV must contain a 'mouseID' column"}), 400
+
+            # Allow headers: either "bodyweight" or "Weight"
+            if 'bodyweight' in row:
+                weight_val = row['bodyweight']
+            elif 'Weight' in row:
+                weight_val = row['Weight']
+            else:
+                return jsonify({"error": "CSV must contain a 'bodyweight' column"}), 400
+
             try:
-                weight = float(row['Weight'])
+                weight_float = float(weight_val)
             except ValueError:
-                return jsonify({"error": f"Invalid weight value for {row['MouseID']}"}), 400
+                return jsonify({"error": f"Invalid weight value for {id_val}"}), 400
 
-            new_mice.append({"mouse_id": row['MouseID'], "weight": weight})
-
-        # Merge new data with manually added mice
+            new_mice.append({"mouse_id": id_val, "weight": weight_float})
         global mice_data
         mice_data.extend(new_mice)
-
         return jsonify({"message": f"{len(new_mice)} mice added successfully from CSV.", "mice_data": mice_data})
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route('/distribute', methods=['POST'])
 def distribute():
-    """Distribute mice into cages using hierarchical clustering"""
+    """
+    Distributes the mice into groups by first sorting them by weight
+    so that similar weights end up together.
+    """
     data = request.json
     n_groups = data.get("n_groups")
 
@@ -92,28 +112,17 @@ def distribute():
     if len(mice_data) == 0:
         return jsonify({"error": "No mice data to distribute."}), 400
 
-    # Convert data to numpy array for clustering
-    weights = np.array([m["weight"] for m in mice_data]).reshape(-1, 1)
+    # Sort mice by weight in ascending order so that similar weights are contiguous.
+    sorted_mice = sorted(mice_data, key=lambda x: x['weight'])
+    groups = split_list(sorted_mice, n_groups)
+    
+    # Calculate the total weight for each group.
+    group_weights = [sum(mouse['weight'] for mouse in group) for group in groups]
 
-    # Perform Hierarchical Clustering
-    Z = linkage(weights, method='ward')  # Ward minimizes variance
-    labels = fcluster(Z, n_groups, criterion='maxclust')
+    # Clear mice_data after distribution to avoid duplicate entries on subsequent runs.
+    mice_data.clear()
 
-    # Group mice according to clusters
-    groups = {i: [] for i in range(1, n_groups+1)}
-    for i, label in enumerate(labels):
-        groups[label].append(mice_data[i])
-
-    return jsonify({"groups": groups})
-
-@app.route('/sample_csv')
-def sample_csv():
-    """ Provides a correctly formatted sample CSV file """
-    sample_data = "MouseID,Weight\nM1,23.5\nM2,21.8\nM3,25.2\nM4,20.0\nM5,22.3\n"
-    return sample_data, 200, {
-        "Content-Type": "text/csv",
-        "Content-Disposition": "attachment; filename=sample_mice.csv"
-    }
+    return jsonify({"groups": groups, "weights": group_weights})
 
 @app.route('/health')
 def health_check():
