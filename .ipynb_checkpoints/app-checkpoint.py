@@ -1,4 +1,8 @@
 from flask import Flask, render_template, request, jsonify
+import csv
+import io
+import numpy as np
+from scipy.cluster.hierarchy import linkage, fcluster
 
 app = Flask(__name__)
 
@@ -11,6 +15,7 @@ def home():
 
 @app.route('/add_mouse', methods=['POST'])
 def add_mouse():
+    """Manually add a mouse with its weight"""
     data = request.json
     mouse_id = data.get("mouse_id")
     weight = data.get("weight")
@@ -30,8 +35,48 @@ def add_mouse():
     mice_data.append({"mouse_id": mouse_id, "weight": weight})
     return jsonify({"message": f"Mouse {mouse_id} added successfully!", "mice_data": mice_data})
 
+@app.route('/upload_csv', methods=['POST'])
+def upload_csv():
+    """ Accepts a CSV file and processes the data """
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    file = request.files['file']
+    
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
+    if not file.filename.endswith('.csv'):
+        return jsonify({"error": "Only CSV files are allowed"}), 400
+
+    try:
+        stream = io.StringIO(file.stream.read().decode("utf-8"))
+        reader = csv.DictReader(stream)
+        new_mice = []
+
+        for row in reader:
+            if 'MouseID' not in row or 'Weight' not in row:
+                return jsonify({"error": "CSV must contain 'MouseID' and 'Weight' columns"}), 400
+            
+            try:
+                weight = float(row['Weight'])
+            except ValueError:
+                return jsonify({"error": f"Invalid weight value for {row['MouseID']}"}), 400
+
+            new_mice.append({"mouse_id": row['MouseID'], "weight": weight})
+
+        # Update global mice_data
+        global mice_data
+        mice_data = new_mice
+
+        return jsonify({"message": f"{len(new_mice)} mice added successfully from CSV.", "mice_data": new_mice})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/distribute', methods=['POST'])
 def distribute():
+    """Distribute mice into cages using hierarchical clustering"""
     data = request.json
     n_groups = data.get("n_groups")
 
@@ -45,21 +90,32 @@ def distribute():
     if len(mice_data) == 0:
         return jsonify({"error": "No mice data to distribute."}), 400
 
-    # Sort mice by weight (descending)
-    sorted_mice = sorted(mice_data, key=lambda x: x['weight'], reverse=True)
-    groups = [[] for _ in range(n_groups)]
-    group_sums = [0.0] * n_groups
+    # Convert data to numpy array for clustering
+    weights = np.array([m["weight"] for m in mice_data]).reshape(-1, 1)
 
-    for mouse in sorted_mice:
-        # Find the group with the lowest total weight
-        lightest_group_idx = group_sums.index(min(group_sums))
-        groups[lightest_group_idx].append(mouse)
-        group_sums[lightest_group_idx] += mouse['weight']
+    # Perform Hierarchical Clustering
+    Z = linkage(weights, method='ward')  # Ward minimizes variance
+    labels = fcluster(Z, n_groups, criterion='maxclust')
 
-    # Clear mice data after distribution to prevent duplicate entries on next run
-    mice_data.clear()
+    # Group mice according to clusters
+    groups = {i: [] for i in range(1, n_groups+1)}
+    for i, label in enumerate(labels):
+        groups[label].append(mice_data[i])
 
-    return jsonify({"groups": groups, "weights": group_sums})
+    return jsonify({"groups": groups})
+
+@app.route('/health')
+def health_check():
+    return "OK", 200
+
+@app.route('/sample_csv')
+def sample_csv():
+    """ Provides a properly formatted sample CSV file """
+    sample_data = "MouseID,Weight\nM1,23.5\nM2,21.8\nM3,25.2\nM4,20.0\nM5,22.3\n"
+    return sample_data, 200, {
+        "Content-Type": "text/csv",
+        "Content-Disposition": "attachment; filename=sample_mice.csv"
+    }
 
 if __name__ == '__main__':
     app.run(debug=True)
